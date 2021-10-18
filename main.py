@@ -1,11 +1,12 @@
 from warnings import filterwarnings
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+# from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import Ridge, Lasso, RidgeCV, LassoCV, ElasticNet, ElasticNetCV, LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.feature_selection import SelectKBest, chi2
-from statsmodels.stats.outliers_influence import variance_inflation_factor
+# from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 from kaggle.api.kaggle_api_extended import KaggleApi
@@ -13,7 +14,7 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 from imblearn.over_sampling import SMOTENC
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import skew
+# from scipy.stats import skew
 sns.set()
 
 filterwarnings("ignore")
@@ -56,7 +57,7 @@ for column in df_num:
         plt.yticks(size=7)
         plotnumber += 1
 plt.savefig('C:\\Python - Lectures\\Project\\numerical_data_distribution.pdf')
-plt.show()
+# plt.show()
 
 # print(df.info())
 # print(df.isna().sum())
@@ -113,7 +114,7 @@ for column in df_new_num:
         plt.yticks(size=7)
         plotnumber += 1
 plt.savefig('C:\\Python - Lectures\\Project\\numerical_data_distribution_cleaned_missing.pdf')
-plt.show()
+# plt.show()
 
 sns.set_context("paper", font_scale=0.9)
 fig, ax = plt.subplots(figsize=(10, 5))
@@ -124,7 +125,7 @@ plt.tight_layout()
 splot.yaxis.grid(True, clip_on=False)
 sns.despine(left=True, bottom=True)
 plt.savefig('C:\\Python - Lectures\\Project\\BoxPlots.pdf', bbox_inches='tight')
-plt.show()
+# plt.show()
 
 # Removing outliers
 df_cleaned = df_new.drop(df_new[(df_new.cigsPerDay > 60)].index)
@@ -174,7 +175,7 @@ for column in df_cleaned_num:
         plt.yticks(size=7)
         plotnumber += 1
 plt.savefig('C:\\Python - Lectures\\Project\\numerical_data_distribution_cleaned_outlier.pdf')
-plt.show()
+# plt.show()
 
 sns.set_context("paper", font_scale=0.9)
 fig, ax = plt.subplots(figsize=(10, 5))
@@ -185,17 +186,17 @@ plt.tight_layout()
 splot.yaxis.grid(True, clip_on=False)
 sns.despine(left=True, bottom=True)
 plt.savefig('C:\\Python - Lectures\\Project\\BoxPlots_df_cleaned_outlier.pdf', bbox_inches='tight')
-plt.show()
+# plt.show()
 
-# correlated variables
+# Checking for correlated variables
 df_corr = df_cleaned.corr()
 plt.figure(figsize=(15, 10))
 sns.heatmap(df_corr, annot=True)
+plt.savefig('C:\\Python - Lectures\\Project\\Correlated_variables.pdf')
 plt.show()
 
-# X = df_cleaned.drop(columns=['TenYearCHD', 'currentSmoker', 'diaBP'])
-X = df_cleaned.drop(columns=['TenYearCHD'])
-y = df_cleaned['TenYearCHD']
+X = df_cleaned.drop(columns=['TenYearCHD'])  # independent variables
+y = df_cleaned['TenYearCHD']  # target variable
 print(X)
 
 # Using SelectKBest to extract top 10 features
@@ -214,17 +215,46 @@ print(featureScores)
 features_list = featureScores['Feature'].tolist()[:10]
 print(features_list)
 
-scalar = StandardScaler()
-X_scaled = scalar.fit_transform(X)
+df_reduced = df_cleaned[['age', 'cigsPerDay', 'totChol', 'sysBP', 'diaBP', 'glucose', 'male', 'BPMeds',
+                         'prevalentStroke', 'prevalentHyp', 'TenYearCHD']]
+
+# checking correlated variables again
+df_reduced_corr = df_reduced.corr()
+plt.figure(figsize=(15, 10))
+sns.heatmap(df_reduced_corr, annot=True)
+plt.xticks(rotation=90)
+plt.yticks(rotation=0)
+plt.savefig('C:\\Python - Lectures\\Project\\Correlated_variables_df_reduced.pdf')
+plt.show()
+
+# sysBP amd diaBP are highly correlated at 77%. Removing diaBP due to sysBP having a higher feature score.
+# sysBP amd prevalentHyp are highly correlated at 69%. Removing prevalentHyp due to sysBP having a higher feature score.
+df_reduced.drop(columns=['diaBP', 'prevalentHyp'], inplace=True)
+X_reduced = df_reduced.drop(columns=['TenYearCHD'])  # independent variables
+y = df_reduced['TenYearCHD']  # target variable
+print(df_reduced)
+
+
+# Scaling data
+scalar = MinMaxScaler()
+# create scaled data
+# X_scaled = pd.DataFrame(scalar.fit_transform(X_reduced), columns=X_reduced.columns)
+# print(X_scaled.describe())
+X_scaled = scalar.fit_transform(X_reduced)
+# view scaled data
 print(X_scaled)
 
+# scalar = StandardScaler()
+# X_scaled = scalar.fit_transform(X)
+# print(X_scaled)
+
 # multicollinearity
-vif = pd.DataFrame()
-vif["vif"] = [variance_inflation_factor(X_scaled, i) for i in range(X_scaled.shape[1])]
-vif["Features"] = X.columns
+# vif = pd.DataFrame()
+# vif["vif"] = [variance_inflation_factor(X_scaled, i) for i in range(X_scaled.shape[1])]
+# vif["Features"] = X_reduced.columns
 
 # let's check the values
-print(vif)
+# print(vif)
 
 # smote = SMOTE(sampling_strategy='minority')
 
@@ -297,7 +327,7 @@ plt.show()
 # smt = SMOTE()
 # X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
 # Imbalanced data therefore resampling required
-smote_nc = SMOTENC(categorical_features=[8, 9, 10, 11, 12, 13, 14], sampling_strategy='minority', random_state=0)
+smote_nc = SMOTENC(categorical_features=[5, 6, 7], sampling_strategy='minority', random_state=0)
 X_resampled, y_resampled = smote_nc.fit_resample(X_train, y_train)
 
 print(X_resampled.shape)
