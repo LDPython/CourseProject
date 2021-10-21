@@ -5,13 +5,16 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import Ridge, Lasso, RidgeCV, LassoCV, ElasticNet, ElasticNetCV, LogisticRegression
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, chi2
 # from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
 from kaggle.api.kaggle_api_extended import KaggleApi
-# from imblearn.over_sampling import SMOTE
-from imblearn.over_sampling import SMOTENC
+from imblearn.over_sampling import SMOTE
+# from imblearn.over_sampling import SMOTENC
 import matplotlib.pyplot as plt
 import seaborn as sns
 # from scipy.stats import skew
@@ -59,13 +62,6 @@ for column in df_num:
 plt.savefig('C:\\Python - Lectures\\Project\\numerical_data_distribution.pdf')
 # plt.show()
 
-# print(df.info())
-# print(df.isna().sum())
-# print(df.isnull().sum())
-# print(df['education'].value_counts())
-# print(df['TenYearCHD'].value_counts())
-# print(df['BPMeds'].value_counts())
-
 # replacing zero values with the mean of the column
 df_cat['education'] = df_cat['education'].fillna(0)
 # df_num['cigsPerDay'] = df_num['cigsPerDay'].replace(np.nan, df_num['cigsPerDay'].mean())
@@ -83,16 +79,6 @@ df_new.loc[(df_new['currentSmoker'] == 0) & (df_new['cigsPerDay'] == np.nan), 'c
 mean_cigs = lambda x: df_new['cigsPerDay'].fillna(df_new[df_new.currentSmoker == 1]['cigsPerDay'].mean())
 df_new['cigsPerDay'].where(~(df_new['currentSmoker'] == 1) & (df_new['cigsPerDay'] == np.nan),
                            other=mean_cigs, inplace=True)
-
-# print(df)
-# print(df.info())
-# print(df.isna().sum())
-# print(df.isnull().sum())
-# print(df.head(133))
-# print(df.tail())
-# print(df.isnull())
-# print(df.describe())
-# print(mean_cigs)
 
 df_new.to_csv('C:\\Python - Lectures\\Project\\framingham_cleaned_missing.csv')
 
@@ -195,9 +181,30 @@ sns.heatmap(df_corr, annot=True)
 plt.savefig('C:\\Python - Lectures\\Project\\Correlated_variables.pdf')
 plt.show()
 
-X = df_cleaned.drop(columns=['TenYearCHD'])  # independent variables
-y = df_cleaned['TenYearCHD']  # target variable
+# sysBP amd diaBP are highly correlated at 77%. Removing diaBP due to sysBP having a higher feature score.
+# sysBP amd prevalentHyp are highly correlated at 69%. Removing prevalentHyp due to sysBP having a higher feature score.
+df_reduced = df_cleaned.drop(columns=['diaBP', 'prevalentHyp'])
+X = df_reduced.drop(columns=['TenYearCHD'])  # independent variables
+y = df_reduced['TenYearCHD']  # target variable
 print(X)
+
+# PCA for feature selection
+pca = PCA()
+principalComponents = pca.fit_transform(X)
+plt.figure()
+plt.plot(np.cumsum(pca.explained_variance_ratio_))
+plt.xlabel('Number of Components')
+plt.ylabel('Variance (%)')  # for each component
+plt.title('Explained Variance')
+plt.savefig('C:\\Python - Lectures\\Project\\PCA_Explained_Variance.pdf')
+plt.show()
+
+# We can see that around 97.5% of the variance is being explained by 4 components. So instead of giving all remaining
+# 13 columns as input in our algorithm let's use the top 4 features instead.
+
+# pca = PCA(n_components=5)
+# new_data = pca.fit_transform(X)
+# principal_x = pd.DataFrame(new_data,columns=['PC-1','PC-2','PC-3','PC-4','PC-5'])
 
 # Using SelectKBest to extract top 10 features
 bestfeatures = SelectKBest(score_func=chi2, k=10)
@@ -212,11 +219,10 @@ featureScores.columns = ['Feature', 'Score']
 featureScores = featureScores.sort_values(by='Score', ascending=False)
 print(featureScores)
 # selecting the 10 most impactful features to the target variable
-features_list = featureScores['Feature'].tolist()[:10]
+features_list = featureScores['Feature'].tolist()[:4]
 print(features_list)
 
-df_reduced = df_cleaned[['age', 'cigsPerDay', 'totChol', 'sysBP', 'diaBP', 'glucose', 'male', 'BPMeds',
-                         'prevalentStroke', 'prevalentHyp', 'TenYearCHD']]
+df_reduced = df_reduced[['age', 'cigsPerDay', 'totChol', 'sysBP', 'TenYearCHD']]
 
 # checking correlated variables again
 df_reduced_corr = df_reduced.corr()
@@ -227,19 +233,15 @@ plt.yticks(rotation=0)
 plt.savefig('C:\\Python - Lectures\\Project\\Correlated_variables_df_reduced.pdf')
 plt.show()
 
-# sysBP amd diaBP are highly correlated at 77%. Removing diaBP due to sysBP having a higher feature score.
-# sysBP amd prevalentHyp are highly correlated at 69%. Removing prevalentHyp due to sysBP having a higher feature score.
-df_reduced.drop(columns=['diaBP', 'prevalentHyp'], inplace=True)
 X_reduced = df_reduced.drop(columns=['TenYearCHD'])  # independent variables
 y = df_reduced['TenYearCHD']  # target variable
 print(df_reduced)
-
 
 # Scaling data
 scalar = MinMaxScaler()
 # create scaled data
 # X_scaled = pd.DataFrame(scalar.fit_transform(X_reduced), columns=X_reduced.columns)
-# print(X_scaled.describe())
+# print(X_scaled.describe().T)
 X_scaled = scalar.fit_transform(X_reduced)
 # view scaled data
 print(X_scaled)
@@ -248,62 +250,43 @@ print(X_scaled)
 # X_scaled = scalar.fit_transform(X)
 # print(X_scaled)
 
-# multicollinearity
-# vif = pd.DataFrame()
-# vif["vif"] = [variance_inflation_factor(X_scaled, i) for i in range(X_scaled.shape[1])]
-# vif["Features"] = X_reduced.columns
+# Train Test Split - do this because we don't want a biased dataset / algorithm
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.25, stratify=y, random_state=777)
 
-# let's check the values
-# print(vif)
-
-# smote = SMOTE(sampling_strategy='minority')
-
-# X_resampled, y_resampled = smote.fit_resample(X, y)
-# print(X_resampled.shape)
-# print(y_resampled.shape)
-
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.25, stratify=y, random_state=666)
-
-log_reg = LogisticRegression()
-log_reg.fit(X_train, y_train)
-y_pred = log_reg.predict(X_test)
 print(X_train.shape)
 print(y_train.shape)
 print(y_train.value_counts())
+print(np.bincount(y))
+print(np.bincount(y_train))
+print(np.bincount(y_test))
 print(X_test.shape)
 print(y_test.shape)
-print(y_pred.shape)
+
+# Logistic Regression - before resampling
+log_reg = LogisticRegression()
+log_reg.fit(X_train, y_train)
+y_pred = log_reg.predict(X_test)
+
 accuracy = accuracy_score(y_test, y_pred)
-print(accuracy)
 
 # Confusion Matrix
 conf_mat = confusion_matrix(y_test, y_pred)
-print(conf_mat)
 
 true_positive = conf_mat[0][0]
 false_positive = conf_mat[0][1]
 false_negative = conf_mat[1][0]
 true_negative = conf_mat[1][1]
-print(true_positive)
-# Breaking down the formula for Accuracy
-Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
-# print(Accuracy)
 
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
 # Recall
 Recall = true_positive/(true_positive+false_negative)
-# print(Recall)
-
 # Precision
 Precision = true_positive/(true_positive+false_positive)
-# print(Precision)
-
 # F1 Score
 F1_Score = 2*(Recall * Precision) / (Recall + Precision)
-# print(F1_Score)
-
 # Area Under Curve
 auc = roc_auc_score(y_test, y_pred)
-# print(auc)
 
 print('The accuracy of the model [TP+TN/(TP+TN+FP+FN)] = ', Accuracy, '\n',
       'Misclassification [1-Accuracy] = ', 1-Accuracy, '\n',
@@ -311,24 +294,26 @@ print('The accuracy of the model [TP+TN/(TP+TN+FP+FN)] = ', Accuracy, '\n',
       'Specificity or True Negative Rate [TN/(TN+FP)] = ', true_negative/float(true_negative+false_positive), '\n',
       'Precision [TP/(TP+FP)] = ', Precision, '\n',
       'F1 Score [2*(Recall * Precision) / (Recall + Precision))] = ', F1_Score, '\n',
+      'Confusion Matrix is', conf_mat, '\n',
       'Area Under Curve [roc_auc_score(y_test, y_pred)] = ', auc, '\n',)
 
-
+# ROC Curve
 fpr, tpr, threshold = roc_curve(y_test, y_pred)
 plt.plot(fpr, tpr, color='orange', label='ROC')
 plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
-plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Pre Resampling')
 plt.legend()
 plt.show()
 
-
-# smt = SMOTE()
-# X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
 # Imbalanced data therefore resampling required
-smote_nc = SMOTENC(categorical_features=[5, 6, 7], sampling_strategy='minority', random_state=0)
-X_resampled, y_resampled = smote_nc.fit_resample(X_train, y_train)
+smt = SMOTE(sampling_strategy='minority', random_state=77)
+X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
+
+# if the dataset includes categorical features
+# smote_nc = SMOTENC(categorical_features=[5, 6, 7], sampling_strategy='minority', random_state=0)
+# X_resampled, y_resampled = smote_nc.fit_resample(X_train, y_train)
 
 print(X_resampled.shape)
 print(y_resampled.shape)
@@ -336,54 +321,195 @@ print(np.bincount(y))
 print(np.bincount(y_train))
 print(np.bincount(y_resampled))
 
-# log_reg = LogisticRegression()
+# 1. LOGISTIC REGRESSION ######
+log_reg = LogisticRegression()
 log_reg.fit(X_resampled, y_resampled)
 y_pred = log_reg.predict(X_test)
 
-print(accuracy_score(y_test, y_pred))
+# print(accuracy_score(y_test, y_pred))
 cm = confusion_matrix(y_test, y_pred)
-print(cm)
 
 true_positive = cm[0][0]
 false_positive = cm[0][1]
 false_negative = cm[1][0]
 true_negative = cm[1][1]
-print(true_positive)
-# Breaking down the formula for Accuracy
-Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
 
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
 # Recall
 Recall = true_positive/(true_positive+false_negative)
-
 # Precision
 Precision = true_positive/(true_positive+false_positive)
-
 # F1 Score
 F1_Score = 2*(Recall * Precision) / (Recall + Precision)
-
 # Area Under Curve
 auc = roc_auc_score(y_test, y_pred)
 
-print('The accuracy of the model [TP+TN/(TP+TN+FP+FN)] = ', Accuracy, '\n',
-      'Misclassification [1-Accuracy] = ', 1-Accuracy, '\n',
-      'Sensitivity or Recall or True Positive Rate [TP/(TP+FN)] = ', Recall, '\n',
-      'Specificity or True Negative Rate [TN/(TN+FP)] = ', true_negative/float(true_negative+false_positive), '\n',
-      'Precision [TP/(TP+FP)] = ', Precision, '\n',
-      'F1 Score [2*(Recall * Precision) / (Recall + Precision))] = ', F1_Score, '\n',
-      'Area Under Curve [roc_auc_score(y_test, y_pred)] = ', auc, '\n',)
+print('The accuracy score for Logistic Regression is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for Logistic Regression is ', Recall, '\n',
+      'Specificity or True Negative Rate for Logistic Regression is ',
+      true_negative/float(true_negative+false_positive), '\n',
+      'Precision for Logistic Regression is ', Precision, '\n',
+      'F1 score for Logistic Regression is ', F1_Score, '\n',
+      'Confusion Matrix for Logistic Regression is', cm, '\n',
+      'Area Under Curve for Logistic Regression is ', auc)
 
-
+# ROC Curve
 fpr, tpr, threshold = roc_curve(y_test, y_pred)
 plt.plot(fpr, tpr, color='orange', label='ROC')
 plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
-plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Logistic Regression')
 plt.legend()
 plt.show()
 
+# 2. DECISION TREE ######
+# Decision tree algorithm can perform both classification and regression analysis
+# Classification and Regression Algorithm (CART)
+# Scaling and normalization are not needed
 dt = DecisionTreeClassifier()
-dt.fit(X_train, y_train)
-print(dt.score(X_test, y_test))
+# dt.fit(X_train, y_train)
+# print(dt.score(X_train, y_train))  # score of 0.999 therefore over-fit to the training data
+# print(dt.score(X_test, y_test))  # 0.75 our decision tree is over-fit and we need to improve it
 dt.fit(X_resampled, y_resampled)
-print(dt.score(X_test, y_test))
+y_pred = dt.predict(X_test)
+print(dt.score(X_resampled, y_resampled))  # score of 0.999 therefore over-fit to the training data
+print(dt.score(X_test, y_test))  # 0.71 our decision tree is over-fit and we need to improve it
+# We haven't done any hyper parameter tuning. Let's do this and see how our score improves
+
+# feature_name=list(X_train.columns)
+# class_name = list(y_train.unique())  # list
+# print(feature_name)
+# print(class_name)
+
+# print(accuracy_score(y_test, y_pred))
+cm = confusion_matrix(y_test, y_pred)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred)
+
+print('The accuracy score for Decision Tree is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for Decision Tree is ', Recall, '\n',
+      'Specificity or True Negative Rate for Decision Tree is ',
+      true_negative/float(true_negative+false_positive), '\n',
+      'Precision for Decision Tree is ', Precision, '\n',
+      'F1 score for Decision Tree is ', F1_Score, '\n',
+      'Confusion Matrix for Decision Tree is', cm, '\n',
+      'Area Under Curve for Decision Tree is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Decision Tree')
+plt.legend()
+plt.show()
+
+
+# 3. KNN - k-Nearest Neighbor ######
+# k-NN is one of the most fundamental algorithms for classification and regression in the Machine Learning world.
+# It is a type of supervised learning algorithm which is used for both regression and classification purposes,
+# but mostly it is used for the later.
+# let's fit the data into kNN model and see how well it performs:
+knn = KNeighborsClassifier()
+knn.fit(X_resampled, y_resampled)
+y_pred = knn.predict(X_test)
+
+# print(accuracy_score(y_test, y_pred))
+cm = confusion_matrix(y_test, y_pred)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred)
+
+print('The accuracy score for KNN is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for KNN is ', Recall, '\n',
+      'Specificity or True Negative Rate for KNN is ', true_negative/float(true_negative+false_positive), '\n',
+      'Precision for KNN is ', Precision, '\n',
+      'F1 score for KNN is ', F1_Score, '\n',
+      'Confusion Matrix for KNN is', cm, '\n',
+      'Area Under Curve for KNN is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - KNN')
+plt.legend()
+plt.show()
+
+
+# 3. Random Forest ######
+# It can be used for both regression and classification problems.
+rand_clf = RandomForestClassifier(random_state=6)
+rand_clf.fit(X_resampled, y_resampled)
+y_pred = rand_clf.predict(X_test)
+rand_clf.score(X_test, y_test)
+
+# print(accuracy_score(y_test, y_pred))
+cm = confusion_matrix(y_test, y_pred)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred)
+
+print('The accuracy score for Random Forest is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for Random Forest is ', Recall, '\n',
+      'Specificity or True Negative Rate for Random Forest is ', true_negative/float(true_negative+false_positive), '\n',
+      'Precision for Random Forest is ', Precision, '\n',
+      'F1 score for Random Forest is ', F1_Score, '\n',
+      'Confusion Matrix for Random Forest is', cm, '\n',
+      'Area Under Curve for Random Forest is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Random Forest')
+plt.legend()
+plt.show()
+
