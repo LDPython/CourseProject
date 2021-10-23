@@ -1,7 +1,9 @@
 from warnings import filterwarnings
 import pandas as pd
 import numpy as np
+# import xgboost as xgb
 # from sklearn.preprocessing import StandardScaler
+from kaggle.api.kaggle_api_extended import KaggleApi
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import Ridge, Lasso, RidgeCV, LassoCV, ElasticNet, ElasticNetCV, LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -9,12 +11,15 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, chi2
 # from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, roc_auc_score
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
-from kaggle.api.kaggle_api_extended import KaggleApi
 from imblearn.over_sampling import SMOTE
 # from imblearn.over_sampling import SMOTENC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+# from sklearn.ensemble import GradientBoostingClassifier
+from xgboost import XGBClassifier
+from sklearn.model_selection import GridSearchCV
 import matplotlib.pyplot as plt
 import seaborn as sns
 # from scipy.stats import skew
@@ -368,7 +373,7 @@ plt.show()
 # Decision tree algorithm can perform both classification and regression analysis
 # Classification and Regression Algorithm (CART)
 # Scaling and normalization are not needed
-dt = DecisionTreeClassifier()
+dt = DecisionTreeClassifier(min_samples_split= 2)
 # dt.fit(X_train, y_train)
 # print(dt.score(X_train, y_train))  # score of 0.999 therefore over-fit to the training data
 # print(dt.score(X_test, y_test))  # 0.75 our decision tree is over-fit and we need to improve it
@@ -497,7 +502,8 @@ auc = roc_auc_score(y_test, y_pred)
 
 print('The accuracy score for Random Forest is ', Accuracy, '\n',
       'Sensitivity or Recall or True Positive Rate for Random Forest is ', Recall, '\n',
-      'Specificity or True Negative Rate for Random Forest is ', true_negative/float(true_negative+false_positive), '\n',
+      'Specificity or True Negative Rate for Random Forest is ',
+      true_negative/float(true_negative+false_positive), '\n',
       'Precision for Random Forest is ', Precision, '\n',
       'F1 score for Random Forest is ', F1_Score, '\n',
       'Confusion Matrix for Random Forest is', cm, '\n',
@@ -510,6 +516,200 @@ plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (are
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.title('Receiver Operating Characteristic (ROC) Curve - Random Forest')
+plt.legend()
+plt.show()
+
+
+# 4. SVM - Support Vector Machine ######
+
+# It can be used for both regression and classification problems.
+
+svc = SVC()
+svc.fit(X_resampled, y_resampled)
+y_pred = svc.predict(X_test)
+svc.score(X_test, y_test)
+
+# print(accuracy_score(y_test, y_pred))
+cm = confusion_matrix(y_test, y_pred)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred)
+
+print('The accuracy score for SVM is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for SVM is ', Recall, '\n',
+      'Specificity or True Negative Rate for SVM is ', true_negative/float(true_negative+false_positive), '\n',
+      'Precision for SVM is ', Precision, '\n',
+      'F1 score for SVM is ', F1_Score, '\n',
+      'Confusion Matrix for SVM is', cm, '\n',
+      'Area Under Curve for SVM is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - SVM')
+plt.legend()
+plt.show()
+
+
+# 5. Gradient Boosting ######
+gb = GradientBoostingClassifier(random_state=7)
+gb.fit(X_resampled, y_resampled)
+y_pred = gb.predict(X_test)
+gb.score(X_test, y_test)
+
+# print(accuracy_score(y_test, y_pred))
+cm = confusion_matrix(y_test, y_pred)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred)
+
+print('The accuracy score for Gradient Boosting is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for Gradient Boosting is ', Recall, '\n',
+      'Specificity or True Negative Rate for Gradient Boosting is ',
+      true_negative/float(true_negative+false_positive), '\n',
+      'Precision for Gradient Boosting is ', Precision, '\n',
+      'F1 score for Gradient Boosting is ', F1_Score, '\n',
+      'Confusion Matrix for Gradient Boosting is', cm, '\n',
+      'Area Under Curve for Gradient Boosting is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Gradient Boosting')
+plt.legend()
+plt.show()
+
+
+# 6. XGBoost - Extreme Gradient Boosting ######
+xgb = XGBClassifier(objective='binary:logistic')
+xgb.fit(X_resampled, y_resampled)
+y_pred = xgb.predict(X_test)
+xgb.score(X_test, y_test)
+
+# print(accuracy_score(y_test, y_pred))
+cm = confusion_matrix(y_test, y_pred)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred)
+
+print('The accuracy score for Extreme Gradient Boosting is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for Extreme Gradient Boosting is ', Recall, '\n',
+      'Specificity or True Negative Rate for Extreme Gradient Boosting is ',
+      true_negative/float(true_negative+false_positive), '\n',
+      'Precision for Extreme Gradient Boosting is ', Precision, '\n',
+      'F1 score for Extreme Gradient Boosting is ', F1_Score, '\n',
+      'Confusion Matrix for Extreme Gradient Boosting is', cm, '\n',
+      'Area Under Curve for Extreme Gradient Boosting is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Extreme Gradient Boosting')
+plt.legend()
+plt.show()
+
+
+# HYPERPARAMETER TUNING ####
+# Using Gradient Search Cross Validation
+param_grid = {
+    'learning_rate': [1, 0.5, 0.1, 0.01, 0.001],
+    'max_depth': [3, 5, 10, 20],
+    'n_estimators': [10, 50, 100, 200]
+}
+grid = GridSearchCV(XGBClassifier(objective='binary:logistic'), param_grid, verbose=3)
+
+# grid.fit(X_resampled, y_resampled)
+# print(grid.best_params_)
+
+xgb_grid = XGBClassifier(learning_rate=0.1, max_depth=20, n_estimators=200)
+xgb_grid.fit(X_resampled, y_resampled)
+y_pred_grid = xgb_grid.predict(X_test)
+print(xgb_grid.score(X_test, y_test))
+print(xgb_grid.score(X_resampled, y_resampled))
+print(accuracy_score(y_test, y_pred_grid))
+
+cm = confusion_matrix(y_test, y_pred_grid)
+
+true_positive = cm[0][0]
+false_positive = cm[0][1]
+false_negative = cm[1][0]
+true_negative = cm[1][1]
+
+# Accuracy
+Accuracy = (true_positive + true_negative) / (true_positive + false_positive + false_negative + true_negative)
+# Recall
+Recall = true_positive/(true_positive+false_negative)
+# Precision
+Precision = true_positive/(true_positive+false_positive)
+# F1 Score
+F1_Score = 2*(Recall * Precision) / (Recall + Precision)
+# Area Under Curve
+auc = roc_auc_score(y_test, y_pred_grid)
+
+print('The accuracy score for Extreme Gradient Boosting Hyper is ', Accuracy, '\n',
+      'Sensitivity or Recall or True Positive Rate for Extreme Gradient Boosting Hyper is ', Recall, '\n',
+      'Specificity or True Negative Rate for Extreme Gradient Boosting Hyper is ',
+      true_negative/float(true_negative+false_positive), '\n',
+      'Precision for Extreme Gradient Boosting Hyper is ', Precision, '\n',
+      'F1 score for Extreme Gradient Boosting Hyper is ', F1_Score, '\n',
+      'Confusion Matrix for Extreme Gradient Boosting Hyper is ', cm, '\n',
+      'Area Under Curve for Extreme Gradient Boosting Hyper is ', auc)
+
+# ROC Curve
+fpr, tpr, threshold = roc_curve(y_test, y_pred_grid)
+plt.plot(fpr, tpr, color='orange', label='ROC')
+plt.plot([0, 1], [0, 1], color='darkblue', linestyle='--', label='ROC curve (area = %0.2f)' % auc)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve - Extreme Gradient Boosting Hyper')
 plt.legend()
 plt.show()
 
